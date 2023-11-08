@@ -10,28 +10,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        luaVersion: [ "5.4", "5.3", "5.2", "5.1", "luajit", "luajit-openresty" ]
-        platform: [ "ubuntu-22.04", "macos-11", "windows-2022" ]
-    runs-on: ${{ matrix.platform }}
+        luaVersion:
+          - v: "5.4"
+            s: 54
+          - v: "5.3"
+            s: 53
+          - v: "5.2"
+            s: 52
+          - v: "5.1"
+            s: 51
+          - v: "luajit"
+            s: jit
+          - v: "luajit-openresty"
+        platform: [ "ubuntu-22.04", "macos-11", "windows-2022", "mingw" ]
+    runs-on: ${{ matrix.platform == 'mingw' && 'windows-2022' || matrix.platform }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup ’msvc’
-        if: ${{ startsWith(matrix.platform, 'windows') && !startsWith(matrix.luaVersion, 'luajit') }}
+        if: ${{ startsWith(matrix.platform, 'windows') && !startsWith(matrix.luaVersion.v, 'luajit') }}
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Setup ’msys2’
+        uses: msys2/setup-msys2@v2
+        if: ${{ matrix.platform == 'mingw' }}
+        with:
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-lua-luarocks
+            mingw-w64-x86_64-lua${{ matrix.luaVersion.s }}
       - name: Setup ‘lua’
         uses: leso-kn/gh-actions-lua@v11-staging
+        if: ${{ matrix.platform != 'mingw' }}
         with:
-          luaVersion: ${{ matrix.luaVersion }}
+          luaVersion: ${{ matrix.luaVersion.v }}
       - name: Setup ‘luarocks’
         uses: hishamhm/gh-actions-luarocks@master
+        if: ${{ matrix.platform != 'mingw' }}
       - name: Make and install
+        shell: ${{ matrix.platform == 'mingw' && 'msys2 {0}' || 'bash' }}
         run: |
           luarocks make -- luasocket-scm-3.rockspec
         env:
           DEBUG: DEBUG
       - name: Run regression tests
-        shell: bash
+        shell: ${{ matrix.platform == 'mingw' && 'msys2 {0}' || 'bash' }}
         run: |
           cd test
           lua hello.lua
